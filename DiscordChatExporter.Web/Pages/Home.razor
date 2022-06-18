@@ -1,0 +1,82 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+@using DiscordChatExporter.Core.Discord
+@using DiscordChatExporter.Core.Discord.Data
+@using DiscordChatExporter.Core.Exceptions
+@using DiscordChatExporter.Core.Utils.Extensions
+
+@page "/"
+
+<PageTitle>Home</PageTitle>
+
+<form @onsubmit="PopulateGuildsAndChannels">
+    <input @bind="_token" />
+    <button type="submit">▶</button>
+</form>
+
+<div>
+    @if (_guildChannelMap is not null)
+    {
+        @foreach (var guild in _guildChannelMap.Keys)
+        {
+            <button @onclick="() => _selectedGuild = guild">@guild.Name</button>
+        }
+    }
+</div>
+
+<div>
+     @if (_guildChannelMap is not null && _selectedGuild is not null)
+     {
+         @foreach (var channel in _guildChannelMap[_selectedGuild])
+         {
+             <div>
+                 <a href="/export?token=@_token&channelId=@channel.Id">@channel.Name</a>
+             </div>
+         }
+     }
+</div>
+
+@code {
+    private bool _isBusy;
+
+    private string? _token;
+
+    private IReadOnlyDictionary<Guild, IReadOnlyList<Channel>>? _guildChannelMap;
+    private Guild? _selectedGuild;
+
+    private async Task PopulateGuildsAndChannels()
+    {
+        _isBusy = true;
+
+        try
+        {
+            var token = _token?.Trim('"', ' ');
+            if (string.IsNullOrWhiteSpace(token))
+                return;
+
+            var discord = new DiscordClient(token);
+
+            var guildChannelMap = new Dictionary<Guild, IReadOnlyList<Channel>>();
+            await foreach (var guild in discord.GetUserGuildsAsync())
+            {
+                var channels = await discord.GetGuildChannelsAsync(guild.Id);
+                guildChannelMap[guild] = channels.Where(c => c.IsTextChannel).ToArray();
+            }
+
+            _guildChannelMap = guildChannelMap;
+            _selectedGuild = guildChannelMap.Keys.FirstOrDefault();
+        }
+        catch (DiscordChatExporterException ex) when (!ex.IsFatal)
+        {
+            // TODO: Show error
+        }
+        catch (Exception ex)
+        {
+            // TODO: Show error
+        }
+        finally
+        {
+            //progress.ReportCompletion();
+            _isBusy = false;
+        }
+    }
+}

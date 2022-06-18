@@ -1,0 +1,72 @@
+﻿@using System.IO
+@using System.IO.Compression
+@using Blazorme
+@using DiscordChatExporter.Core.Discord
+@using DiscordChatExporter.Core.Exporting
+@using DiscordChatExporter.Core.Exporting.Filtering
+@using DiscordChatExporter.Core.Exporting.Partitioning
+@using DiscordChatExporter.Core.Utils.Extensions
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+
+@page "/export"
+
+@inject NavigationManager _navigationManager
+@inject IStreamSaver _streamSaver
+
+<button @onclick="Download">Export</button>
+
+@code {
+
+    private async Task Download()
+    {
+        Console.WriteLine("test");
+        var query = QueryHelpers.ParseQuery(new Uri(_navigationManager.Uri).Query);
+
+        var token = query.GetValueOrDefault("token").LastOrDefault();
+        var channelId = query.GetValueOrDefault("channelId").LastOrDefault()?.Pipe(Snowflake.Parse);
+
+        Console.WriteLine(token);
+        Console.WriteLine(channelId);
+
+        if (string.IsNullOrWhiteSpace(token) || channelId is null)
+        {
+            _navigationManager.NavigateTo("/");
+            return;
+        }
+
+        var discord = new DiscordClient(token);
+        var exporter = new ChannelExporter(discord);
+
+        var outputPath = Path.Combine(Path.GetTempPath(), "test");
+
+        var channel = await discord.GetChannelAsync(channelId.Value);
+        var guild = await discord.GetGuildAsync(channel.GuildId);
+
+        await using var stream = await _streamSaver.CreateWritableFileStreamAsync("blabla.zip");
+
+        await exporter.ExportChannelAsync(
+            new ExportRequest(
+                guild,
+                channel,
+                outputPath,
+                ExportFormat.HtmlDark,
+                null,
+                null,
+                PartitionLimit.Null,
+                MessageFilter.Null,
+                true,
+                true,
+                "dd-MMM-yy hh:mm tt"
+                )
+            );
+
+        ZipFile.CreateFromDirectory(outputPath, Path.Combine(Path.GetTempPath(), "test", "output.zip"));
+        await using var zip = File.OpenRead(Path.Combine(Path.GetTempPath(), "test", "output.zip"));
+        await zip.CopyToAsync(stream);
+    }
+}

@@ -1,0 +1,13 @@
+﻿@inject NavigationManager _navigationManager
+
+@code {
+    [Parameter]
+    public string Href { get; init; } = default!;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        _navigationManager.NavigateTo(Href);
+    }
+}
